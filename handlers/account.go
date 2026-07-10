@@ -3,15 +3,17 @@ package handlers
 import (
 	"fmt"
 	"net/http"
+	"time"
+	"errors"
+
+	"online-banking/utils"
 	"online-banking/dto/request"
 	"online-banking/dto/response"
 	"online-banking/models"
-	"time"
+	"online-banking/database"
 
-	"errors"
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
-	"online-banking/database"
 )
 
 func CreateAccount(c *gin.Context) {
@@ -117,11 +119,21 @@ func DepositMoney(c * gin.Context){
 		c.JSON(http.StatusBadRequest, gin.H{
 			"error" : "Invalid amount",
 		})
+
+		return
 	}
 
 	id := c.Param("id")
 
 	result := database.DB.First(&account, id)
+
+	if errors.Is(result.Error, gorm.ErrRecordNotFound){
+		c.JSON(http.StatusNotFound, gin.H{
+			"error" : "account doesn't exist!",
+		})
+
+		return
+	}
 
 	if result.Error != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{
@@ -135,10 +147,85 @@ func DepositMoney(c * gin.Context){
 		c.JSON(http.StatusBadRequest, gin.H{
 			"error" : "Account is closed",
 		})
-	}
-	account.Balance += deposit.Amount
 
-	result = database.DB.Save(&account)
+		return
+	}
+
+	//creating an atomic process
+
+	err := database.DB.Transaction(func(tx *gorm.DB) error{
+
+		account.Balance += deposit.Amount
+
+		if err := tx.Save(&account).Error; err != nil {
+			return err
+		}
+
+		transaction := models.Transaction{
+			AccountID : account.AccountID,
+			TransactionType : utils.TransactionDeposit,
+			Amount : deposit.Amount,
+		}
+
+		if err := tx.Create(&transaction).Error; err != nil {
+			return err
+		}
+
+		return nil 
+	})
+
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error" : err.Error(),
+		})
+
+		return
+	}
+
+	res := response.DepositRespone{
+		Message: "Balance Updated!",
+		AccountNumber: account.AccountNumber,
+		NewBalance: account.Balance,
+	}
+
+	c.JSON(http.StatusOK, res)
+}
+
+func WithdrawMoney(c * gin.Context){
+
+	var withdraw request.WithdrawRequest
+
+	var account models.Account
+
+	if err := c.BindJSON(&withdraw); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{ 
+			"error" : "Invalid request",
+		})
+
+		return
+	}
+
+	//checking if amount >= 0
+
+	if withdraw.Amount <= 0 {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error" : "Invalid amount",
+		})
+
+		return
+	}
+
+	id := c.Param("id")
+
+	result := database.DB.First(&account, id)
+
+	if errors.Is(result.Error, gorm.ErrRecordNotFound){
+		c.JSON(http.StatusNotFound, gin.H{
+			"error" : "account doesn't exist!",
+		})
+
+		return
+	}
 
 	if result.Error != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{
@@ -148,13 +235,204 @@ func DepositMoney(c * gin.Context){
 		return
 	}
 
-	var transaction models.Transaction
+	if account.Status != "Active" {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error" : "Account is closed",
+		})
 
-	res := response.DepositRespone{
-		Message: "Balance Updated!",
+		return
+	}
+
+	//checking if we have suff amount
+	
+	if withdraw.Amount > account.Balance {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error" : "insufficient balance!",
+		})
+	}
+	//creating an atomic process
+
+	err := database.DB.Transaction(func(tx *gorm.DB) error{
+
+		account.Balance -= withdraw.Amount
+
+		if err := tx.Save(&account).Error; err != nil {
+			return err
+		}
+
+		transaction := models.Transaction{
+			AccountID : account.AccountID,
+			TransactionType : utils.TransactionWithdraw,
+			Amount : withdraw.Amount,
+		}
+
+		if err := tx.Create(&transaction).Error; err != nil {
+			return err
+		}
+
+		return nil 
+	})
+
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error" : err.Error(),
+		})
+
+		return
+	}
+
+	res := response.WithdrawResponse{
+		Message: "Withdrawal Successful!",
 		AccountNumber: account.AccountNumber,
 		NewBalance: account.Balance,
 	}
 
 	c.JSON(http.StatusOK, res)
+}
+
+func GetBalance(c *gin.Context){
+
+	var account models.Account
+	id := c.Param("id")
+
+	result := database.DB.First(&account, id)
+
+	if errors.Is(result.Error, gorm.ErrRecordNotFound) {
+		c.JSON(http.StatusNotFound, gin.H{
+			"error" : "Account not found!",
+		})
+
+		return
+	}
+
+	if result.Error != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error" : result.Error.Error(),
+		})
+
+		return
+	}
+
+	if account.Status == "Closed" {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error" : "Account is Closed",
+		})
+
+		return
+	}
+
+	res := response.BalanceResponse{
+		Balance : account.Balance,
+		AccountNumber: account.AccountNumber,
+	}
+
+	c.JSON(http.StatusOK, res)
+}
+
+func GetTransactions(c * gin.Context){
+
+	var transactions []models.Transaction
+	var account models.Account
+
+	id := c.Param("id")
+
+	result := database.DB.First(&account, id)
+
+	if errors.Is(result.Error, gorm.ErrRecordNotFound){
+		c.JSON(http.StatusNotFound, gin.H{
+			"error" : "Account not found!",
+		})
+
+		return
+	}
+
+	if result.Error != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error" : result.Error.Error(),
+		})
+
+		return
+	}
+
+	if account.Status == utils.AccountClosed {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error" : "Account is Closed",
+		})
+
+		return
+	}
+
+	result = database.DB.Where(
+		"account_id = ?",
+		id,
+	).Order("created_at DESC"). 
+	Limit(10).
+	Find(&transactions)
+
+	if result.Error != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error" : result.Error.Error(),
+		})
+
+		return
+	}
+
+	c.JSON(http.StatusOK, transactions)
+}
+
+func CloseAccount(c * gin.Context){
+
+	id := c.Param("id")
+
+	var account models.Account
+
+	result := database.DB.First(&account, id)
+
+	if errors.Is(result.Error, gorm.ErrRecordNotFound){
+		c.JSON(http.StatusNotFound, gin.H{
+			"error" : "account not found",
+		})
+
+		return
+	}
+
+	if result.Error != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error" : result.Error.Error(),
+		})
+
+		return
+	}
+
+	if account.Status == utils.AccountClosed {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error" : "account already closed",
+		})
+
+		return
+	}
+
+	if account.Balance > 0 {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error" : "Withdraw the remaining amount from the account!",
+		})
+
+		return
+	}
+
+	account.Status = utils.AccountClosed
+
+	result = database.DB.Save(&account)
+
+	if result != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error" : result.Error.Error(),
+		})
+
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"message" : "account closed successfully",
+	})
 }

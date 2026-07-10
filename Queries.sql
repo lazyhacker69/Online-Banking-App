@@ -90,4 +90,42 @@ CREATE TABLE transactions(
         ON DELETE RESTRICT
 );
 
+CREATE TABLE loans (
+    loan_id SERIAL PRIMARY KEY,
 
+    account_id INT NOT NULL,
+
+    loan_type VARCHAR(30)
+        CHECK (loan_type IN ('Personal', 'Home', 'Car', 'Education')),
+
+    principal_amount NUMERIC(15,2) NOT NULL,
+
+    remaining_amount NUMERIC(15,2) NOT NULL,
+
+    interest_rate NUMERIC(5,2) NOT NULL,
+
+    status VARCHAR(20) DEFAULT 'Active'
+        CHECK (status IN ('Active', 'Paid', 'Defaulted')),
+
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT fk_loan_account
+        FOREIGN KEY (account_id)
+        REFERENCES accounts(account_id)
+        ON DELETE RESTRICT
+);
+
+CREATE TABLE loan_payments (
+    payment_id SERIAL PRIMARY KEY,
+
+    loan_id INT NOT NULL,
+
+    amount NUMERIC(15,2) NOT NULL,
+
+    payment_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT fk_payment_loan
+        FOREIGN KEY (loan_id)
+        REFERENCES loans(loan_id)
+        ON DELETE RESTRICT
+);

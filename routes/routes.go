@@ -6,4 +6,6 @@ import (
 
 func RegisterRoutes(router * gin.Engine){
 	RegisterCustomerRoutes(router)
+	RegisterAccountsRoutes(router)
+	RegisterLoanRoutes(router)
 }
