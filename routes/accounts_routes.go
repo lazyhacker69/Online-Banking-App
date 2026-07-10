@@ -8,4 +8,6 @@ import(
 func RegisterAccountsRoutes(router * gin.Engine){
 
 	router.POST("/accounts", handlers.CreateAccount)
+	router.POST("/account/:id/diposit", handlers.DepositMoney)
+
 }
