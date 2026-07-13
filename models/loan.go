@@ -2,7 +2,7 @@ package models
 
 import "time"
 
-type loan struct {
+type Loan struct {
 	LoanID          uint      `gorm:"primaryKey" json:"loan_id"`
 	AccountID       uint      `json:"account_id"`
 	LoanType        string    `json:"loan_type"`

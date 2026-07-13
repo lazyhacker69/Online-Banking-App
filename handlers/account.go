@@ -250,6 +250,7 @@ func WithdrawMoney(c * gin.Context){
 			"error" : "insufficient balance!",
 		})
 	}
+	
 	//creating an atomic process
 
 	err := database.DB.Transaction(func(tx *gorm.DB) error{

@@ -3,6 +3,7 @@ package utils
 const (
 	TransactionDeposit = "Deposit"
 	TransactionWithdraw = "Withdraw"
+	TransactionLoanCredit = "Loan Credit"
 
 	AccountClosed = "Closed"
 	AccountActive = "Active"

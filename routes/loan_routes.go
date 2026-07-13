@@ -5,5 +5,7 @@ import(
 	"online-banking/handlers"
 )
 func RegisterLoanRoutes(router * gin.Engine){
-	router.POST("/account/:id/loan", handlers.CreateLoan)
+	router.POST("/loans", handlers.CreateLoan)
+	router.GET("/loans/:id", handlers.GetLoan)
+	router.GET("/customers/:id/loans", handlers.GetCustomerLoans)
 }
