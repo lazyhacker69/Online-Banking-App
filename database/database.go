@@ -2,15 +2,15 @@ package database
 
 import (
 	"fmt"
-
-	"gorm.io/driver/postgres"  
+	"os"
+	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 )
 
 var DB * gorm.DB
 
 func ConnectDB(){
-	dsn := "host=localhost user=postgres password=0406 dbname=online_banking_system port=5432 sslmode=disable"
+	dsn :=  os.Getenv("databseUrl")
 
 	db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{})
 
