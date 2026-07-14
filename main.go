@@ -15,7 +15,7 @@ func main(){
 
 	routes.RegisterRoutes(router)
 	
-	port := os.Getenv("port")
+	port := os.Getenv("PORT")
 
 	if port == "" {
 		port = "8080"
